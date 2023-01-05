@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{io::BufReader, rc::Rc};
 
 use glfw::{Action, Context, Key};
 use glow::HasContext;
@@ -28,31 +28,52 @@ fn main() {
         glow::Context::from_loader_function(|s| glfw.get_proc_address_raw(s) as *const _)
     });
 
-    let (vbo, vao, ebo, shader) = unsafe {
+    // Load texture files
+    // Container.jpg
+    let image1_file =
+        std::fs::File::open("res/container.jpg").expect("Could not open texture file");
+
+    let image1_buffer = BufReader::new(image1_file);
+
+    let image1 = image::load(image1_buffer, image::ImageFormat::Jpeg)
+        .expect("Failed to process image")
+        .flipv();
+
+    // AwesomeFace.png
+    let image2_file =
+        std::fs::File::open("res/awesomeface.png").expect("Could not open texture file");
+
+    let image2_buffer = BufReader::new(image2_file);
+
+    let image2 = image::load(image2_buffer, image::ImageFormat::Png)
+        .expect("Failed to process image")
+        .flipv();
+
+    // Shader
+    let shader = Shader::from(
+        Rc::clone(&gl),
+        include_str!("../res/vertex.glsl"),
+        include_str!("../res/fragment.glsl"),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    });
+    let (vbo, vao, ebo, texture1, texture2) = unsafe {
         // View setup
         gl.viewport(0, 0, 800, 600);
 
         // Wireframe
         // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
 
-        // Shader
-        let shader = Shader::from(
-            Rc::clone(&gl),
-            include_str!("../res/vertex.glsl"),
-            include_str!("../res/fragment.glsl"),
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        });
-
         // Triangle vertices
         #[rustfmt::skip]
-        let vertices: [f32; 24] = [
-             0.5,  0.5,  0.0, 1.0, 0.0, 0.0,
-             0.5, -0.5,  0.0, 0.0, 1.0, 0.0,
-            -0.5, -0.5,  0.0, 0.0, 0.0, 1.0,
-            -0.5,  0.5,  0.0, 0.0, 0.0, 0.0,
+        let vertices: [f32; 32] = [
+            // Positions         // Colors         // Texture Coords
+             0.5,  0.5,  0.0,    1.0, 0.0, 0.0,    1.0, 1.0,
+             0.5, -0.5,  0.0,    0.0, 1.0, 0.0,    1.0, 0.0,
+            -0.5, -0.5,  0.0,    0.0, 0.0, 1.0,    0.0, 0.0,
+            -0.5,  0.5,  0.0,    1.0, 1.0, 0.0,    0.0, 1.0,
         ];
 
         #[rustfmt::skip]
@@ -60,6 +81,42 @@ fn main() {
             0, 1, 3,
             1, 2, 3,
         ];
+
+        // Texture 1
+        let texture1 = gl.create_texture().expect("Failed to create texture");
+        gl.bind_texture(glow::TEXTURE_2D, Some(texture1));
+
+        gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            glow::RGB as i32, // Thanks OpenGL
+            image1.width() as i32,
+            image1.height() as i32,
+            0,
+            glow::RGB,
+            glow::UNSIGNED_BYTE,
+            Some(image1.as_bytes()),
+        );
+
+        gl.generate_mipmap(glow::TEXTURE_2D);
+
+        // Texture 2
+        let texture2 = gl.create_texture().expect("Failed to create texture");
+        gl.bind_texture(glow::TEXTURE_2D, Some(texture2));
+
+        gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            glow::RGB as i32, // Thanks OpenGL
+            image2.width() as i32,
+            image2.height() as i32,
+            0,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            Some(image2.as_bytes()),
+        );
+
+        gl.generate_mipmap(glow::TEXTURE_2D);
 
         // Vertex Array Object
         let vao = gl
@@ -92,7 +149,7 @@ fn main() {
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 6,
+            std::mem::size_of::<f32>() as i32 * 8,
             0,
         );
         gl.enable_vertex_attrib_array(0);
@@ -103,13 +160,28 @@ fn main() {
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 6,
+            std::mem::size_of::<f32>() as i32 * 8,
             std::mem::size_of::<f32>() as i32 * 3,
         );
         gl.enable_vertex_attrib_array(1);
 
-        (vbo, vao, ebo, shader)
+        // aPos position attribute
+        gl.vertex_attrib_pointer_f32(
+            2,
+            2,
+            glow::FLOAT,
+            false,
+            std::mem::size_of::<f32>() as i32 * 8,
+            std::mem::size_of::<f32>() as i32 * 6,
+        );
+        gl.enable_vertex_attrib_array(2);
+
+        (vbo, vao, ebo, texture1, texture2)
     };
+
+    // Bind texture uniforms
+    shader.bind();
+    shader.set_int("texture2", 1);
 
     // Main Loop
     while !window.should_close() {
@@ -119,22 +191,15 @@ fn main() {
             gl.clear_color(0.2, 0.3, 0.3, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
-            // Get vertex color
-            // let time = glfw.get_time();
-            // let green_value = (time.sin() / 2.0) + 0.5;
-            // let vertex_color_location = gl
-            //     .get_uniform_location(program, "ourColor")
-            //     .expect("Failed to retrieve uniform");
-
             // Draw square
             shader.bind();
-            // gl.uniform_4_f32(
-            //     Some(&vertex_color_location),
-            //     0.0,
-            //     green_value as f32,
-            //     0.0,
-            //     0.0,
-            // );
+
+            // Bind textures
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture1));
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture2));
+
             gl.bind_vertex_array(Some(vao));
             gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
         }
