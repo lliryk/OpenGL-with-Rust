@@ -191,8 +191,17 @@ fn main() {
             gl.clear_color(0.2, 0.3, 0.3, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
+            let identity = glam::Mat4::IDENTITY;
+
+            let translation = glam::Mat4::from_translation(glam::vec3(0.5, -0.5, 0.0));
+            let rotation = glam::Mat4::from_rotation_z(glfw.get_time() as f32);
+
+            let transform = identity.mul_mat4(&translation.mul_mat4(&rotation));
+
             // Draw square
             shader.bind();
+
+            shader.set_mat4_float("transform", false, &transform.to_cols_array());
 
             // Bind textures
             gl.active_texture(glow::TEXTURE0);

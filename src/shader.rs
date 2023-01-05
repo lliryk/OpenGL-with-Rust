@@ -43,12 +43,19 @@ impl Shader {
         // Fragment Shader
         let compiled_fragment_shader =
             Self::compile_shader(Rc::clone(&gl), ShaderType::FragmentShader, fragment_shader)?;
+
         unsafe {
+            let cleanup = || {
+                // Delete shaders
+                gl.delete_shader(compiled_vertex_shader);
+                gl.delete_shader(compiled_fragment_shader);
+            };
             // Program
             let program = match gl.create_program() {
                 Ok(p) => p,
                 Err(err) => {
-                    return Err(CreationError::ProgramCreationFailed { error_message: err })
+                    cleanup();
+                    return Err(CreationError::ProgramCreationFailed { error_message: err });
                 }
             };
 
@@ -57,17 +64,18 @@ impl Shader {
             gl.link_program(program);
 
             if !gl.get_program_link_status(program) {
+                cleanup();
                 return Err(CreationError::ProgramCompilationFailed {
                     error_message: gl.get_program_info_log(program),
                 });
             }
 
-            // Unlink and delete shaders
+            // Unlink shaders then delete
             gl.detach_shader(program, compiled_vertex_shader);
             gl.detach_shader(program, compiled_fragment_shader);
 
-            gl.delete_shader(compiled_vertex_shader);
-            gl.delete_shader(compiled_fragment_shader);
+            cleanup();
+
             Ok(Shader {
                 gl: Rc::clone(&gl),
                 program,
@@ -124,6 +132,19 @@ impl Shader {
         unsafe {
             self.gl.uniform_1_f32(
                 self.gl.get_uniform_location(self.program, name).as_ref(),
+                value,
+            )
+        }
+    }
+
+    pub fn set_mat4_float(&self, name: &str, transpose: bool, value: &[f32]) {
+        // We should use an abstracted Mat4 type from glam or anouther library here
+        // to remove the need to handle invalid values
+        debug_assert!(value.len() == 16);
+        unsafe {
+            self.gl.uniform_matrix_4_f32_slice(
+                self.gl.get_uniform_location(self.program, name).as_ref(),
+                transpose,
                 value,
             )
         }
