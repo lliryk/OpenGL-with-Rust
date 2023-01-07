@@ -137,15 +137,12 @@ impl Shader {
         }
     }
 
-    pub fn set_mat4_float(&self, name: &str, transpose: bool, value: &[f32]) {
-        // We should use an abstracted Mat4 type from glam or anouther library here
-        // to remove the need to handle invalid values
-        debug_assert!(value.len() == 16);
+    pub fn set_mat4(&self, name: &str, transpose: bool, value: &glam::Mat4) {
         unsafe {
             self.gl.uniform_matrix_4_f32_slice(
                 self.gl.get_uniform_location(self.program, name).as_ref(),
                 transpose,
-                value,
+                &value.to_cols_array(),
             )
         }
     }

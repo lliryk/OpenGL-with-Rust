@@ -4,6 +4,9 @@ use glfw::{Action, Context, Key};
 use glow::HasContext;
 use learn_opengl::shader::Shader;
 
+const WIDTH: u32 = 800;
+const HEIGHT: u32 = 600;
+
 fn main() {
     // Initialize GLFW
     let mut glfw = glfw::init(glfw::LOG_ERRORS).unwrap();
@@ -17,7 +20,7 @@ fn main() {
 
     // Create window
     let (mut window, events) = glfw
-        .create_window(800, 600, "Rust OpenGL", glfw::WindowMode::Windowed)
+        .create_window(WIDTH, HEIGHT, "Rust OpenGL", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window");
 
     window.make_current();
@@ -59,27 +62,58 @@ fn main() {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
-    let (vbo, vao, ebo, texture1, texture2) = unsafe {
+    let (vbo, vao, texture1, texture2) = unsafe {
         // View setup
-        gl.viewport(0, 0, 800, 600);
+        gl.viewport(0, 0, WIDTH as i32, HEIGHT as i32);
+        gl.enable(glow::DEPTH_TEST);
 
         // Wireframe
         // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
 
         // Triangle vertices
         #[rustfmt::skip]
-        let vertices: [f32; 32] = [
-            // Positions         // Colors         // Texture Coords
-             0.5,  0.5,  0.0,    1.0, 0.0, 0.0,    1.0, 1.0,
-             0.5, -0.5,  0.0,    0.0, 1.0, 0.0,    1.0, 0.0,
-            -0.5, -0.5,  0.0,    0.0, 0.0, 1.0,    0.0, 0.0,
-            -0.5,  0.5,  0.0,    1.0, 1.0, 0.0,    0.0, 1.0,
-        ];
+        let vertices: [f32; 180] = [
+            -0.5, -0.5, -0.5,  0.0, 0.0,
+             0.5, -0.5, -0.5,  1.0, 0.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,
+            -0.5,  0.5, -0.5,  0.0, 1.0,
+            -0.5, -0.5, -0.5,  0.0, 0.0,
 
-        #[rustfmt::skip]
-        let indicies: [u32; 6] = [
-            0, 1, 3,
-            1, 2, 3,
+            -0.5, -0.5,  0.5,  0.0, 0.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,
+             0.5,  0.5,  0.5,  1.0, 1.0,
+             0.5,  0.5,  0.5,  1.0, 1.0,
+            -0.5,  0.5,  0.5,  0.0, 1.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,
+
+            -0.5,  0.5,  0.5,  1.0, 0.0,
+            -0.5,  0.5, -0.5,  1.0, 1.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,
+            -0.5,  0.5,  0.5,  1.0, 0.0,
+
+             0.5,  0.5,  0.5,  1.0, 0.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,
+             0.5, -0.5, -0.5,  0.0, 1.0,
+             0.5, -0.5, -0.5,  0.0, 1.0,
+             0.5, -0.5,  0.5,  0.0, 0.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,
+
+            -0.5, -0.5, -0.5,  0.0, 1.0,
+             0.5, -0.5, -0.5,  1.0, 1.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,
+
+            -0.5,  0.5, -0.5,  0.0, 1.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,
+            -0.5,  0.5,  0.5,  0.0, 0.0,
+            -0.5,  0.5, -0.5,  0.0, 1.0
         ];
 
         // Texture 1
@@ -134,54 +168,60 @@ fn main() {
             glow::STATIC_DRAW,
         );
 
-        // Element Buffer Object
-        let ebo = gl.create_buffer().expect("Failed to create element buffer");
-        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
-        gl.buffer_data_u8_slice(
-            glow::ELEMENT_ARRAY_BUFFER,
-            indicies.align_to::<u8>().1,
-            glow::STATIC_DRAW,
-        );
-
         // aPos position attribute
         gl.vertex_attrib_pointer_f32(
             0,
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 8,
+            std::mem::size_of::<f32>() as i32 * 5,
             0,
         );
         gl.enable_vertex_attrib_array(0);
 
-        // aPos position attribute
+        // aTexCoord position attribute
         gl.vertex_attrib_pointer_f32(
             1,
-            3,
+            2,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 8,
+            std::mem::size_of::<f32>() as i32 * 5,
             std::mem::size_of::<f32>() as i32 * 3,
         );
         gl.enable_vertex_attrib_array(1);
 
-        // aPos position attribute
-        gl.vertex_attrib_pointer_f32(
-            2,
-            2,
-            glow::FLOAT,
-            false,
-            std::mem::size_of::<f32>() as i32 * 8,
-            std::mem::size_of::<f32>() as i32 * 6,
-        );
-        gl.enable_vertex_attrib_array(2);
-
-        (vbo, vao, ebo, texture1, texture2)
+        (vbo, vao, texture1, texture2)
     };
 
     // Bind texture uniforms
     shader.bind();
+    shader.set_int("texture1", 0);
     shader.set_int("texture2", 1);
+
+    let view = glam::Mat4::IDENTITY * glam::Mat4::from_translation(glam::vec3(0.0, 0.0, -3.0));
+
+    let projection = glam::Mat4::perspective_rh(
+        45.0f32.to_radians(),
+        WIDTH as f32 / HEIGHT as f32,
+        0.1,
+        100.0,
+    );
+
+    shader.set_mat4("view", false, &view);
+    shader.set_mat4("projection", false, &projection);
+
+    let cube_positions = [
+        glam::vec3(0.0, 0.0, 0.0),
+        glam::vec3(2.0, 5.0, -15.0),
+        glam::vec3(-1.5, -2.2, -2.5),
+        glam::vec3(-3.8, -2.0, -12.3),
+        glam::vec3(2.4, -0.4, -3.5),
+        glam::vec3(-1.7, 3.0, -7.5),
+        glam::vec3(1.3, -2.0, -2.5),
+        glam::vec3(1.5, 2.0, -2.5),
+        glam::vec3(1.5, 0.2, -1.5),
+        glam::vec3(-1.3, 1.0, -1.5),
+    ];
 
     // Main Loop
     while !window.should_close() {
@@ -189,19 +229,10 @@ fn main() {
         unsafe {
             // Clear color
             gl.clear_color(0.2, 0.3, 0.3, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
+            gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
-            let identity = glam::Mat4::IDENTITY;
-
-            let translation = glam::Mat4::from_translation(glam::vec3(0.5, -0.5, 0.0));
-            let rotation = glam::Mat4::from_rotation_z(glfw.get_time() as f32);
-
-            let transform = identity.mul_mat4(&translation.mul_mat4(&rotation));
-
-            // Draw square
+            // Shader
             shader.bind();
-
-            shader.set_mat4_float("transform", false, &transform.to_cols_array());
 
             // Bind textures
             gl.active_texture(glow::TEXTURE0);
@@ -209,8 +240,18 @@ fn main() {
             gl.active_texture(glow::TEXTURE1);
             gl.bind_texture(glow::TEXTURE_2D, Some(texture2));
 
+            // Draw model
             gl.bind_vertex_array(Some(vao));
-            gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
+            for (i, pos) in cube_positions.iter().enumerate() {
+                let mut model = glam::Mat4::IDENTITY * glam::Mat4::from_translation(*pos);
+                let angle = i * 20;
+                model *= glam::Mat4::from_axis_angle(
+                    glam::vec3(1.0, 0.3, 0.5).normalize(),
+                    (angle as f32).to_radians(),
+                );
+                shader.set_mat4("model", false, &model);
+                gl.draw_arrays(glow::TRIANGLES, 0, 36);
+            }
         }
 
         // Swap buffers and poll
@@ -236,6 +277,6 @@ fn main() {
     unsafe {
         gl.delete_vertex_array(vao);
         gl.delete_buffer(vbo);
-        gl.delete_buffer(ebo);
+        // gl.delete_buffer(ebo);
     }
 }
