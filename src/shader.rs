@@ -137,6 +137,15 @@ impl Shader {
         }
     }
 
+    pub fn set_vec3(&self, name: &str, value: glam::Vec3) {
+        unsafe {
+            self.gl.uniform_3_f32_slice(
+                self.gl.get_uniform_location(self.program, name).as_ref(),
+                &value.to_array(),
+            )
+        }
+    }
+
     pub fn set_mat4(&self, name: &str, transpose: bool, value: &glam::Mat4) {
         unsafe {
             self.gl.uniform_matrix_4_f32_slice(

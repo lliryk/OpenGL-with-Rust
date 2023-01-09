@@ -1,4 +1,4 @@
-use std::{io::BufReader, rc::Rc};
+use std::rc::Rc;
 
 use glfw::{Action, Context, Key};
 use glow::HasContext;
@@ -36,38 +36,28 @@ fn main() {
         glow::Context::from_loader_function(|s| glfw.get_proc_address_raw(s) as *const _)
     });
 
-    // Load texture files
-    // Container.jpg
-    let image1_file =
-        std::fs::File::open("res/container.jpg").expect("Could not open texture file");
-
-    let image1_buffer = BufReader::new(image1_file);
-
-    let image1 = image::load(image1_buffer, image::ImageFormat::Jpeg)
-        .expect("Failed to process image")
-        .flipv();
-
-    // AwesomeFace.png
-    let image2_file =
-        std::fs::File::open("res/awesomeface.png").expect("Could not open texture file");
-
-    let image2_buffer = BufReader::new(image2_file);
-
-    let image2 = image::load(image2_buffer, image::ImageFormat::Png)
-        .expect("Failed to process image")
-        .flipv();
-
     // Shader
-    let shader = Shader::from(
+    let lighting_shader = Shader::from(
         Rc::clone(&gl),
-        include_str!("../res/vertex.glsl"),
-        include_str!("../res/fragment.glsl"),
+        include_str!("../res/shaders/color.vert"),
+        include_str!("../res/shaders/color.frag"),
     )
     .unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
-    let (vbo, vao, texture1, texture2) = unsafe {
+
+    let light_cube_shader = Shader::from(
+        Rc::clone(&gl),
+        include_str!("../res/shaders/light_cube.vert"),
+        include_str!("../res/shaders/light_cube.frag"),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    });
+
+    let (vbo, cube_vao, light_vao) = unsafe {
         // View setup
         gl.viewport(0, 0, WIDTH as i32, HEIGHT as i32);
         gl.enable(glow::DEPTH_TEST);
@@ -121,48 +111,12 @@ fn main() {
             -0.5,  0.5, -0.5,  0.0, 1.0
         ];
 
-        // Texture 1
-        let texture1 = gl.create_texture().expect("Failed to create texture");
-        gl.bind_texture(glow::TEXTURE_2D, Some(texture1));
-
-        gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGB as i32, // Thanks OpenGL
-            image1.width() as i32,
-            image1.height() as i32,
-            0,
-            glow::RGB,
-            glow::UNSIGNED_BYTE,
-            Some(image1.as_bytes()),
-        );
-
-        gl.generate_mipmap(glow::TEXTURE_2D);
-
-        // Texture 2
-        let texture2 = gl.create_texture().expect("Failed to create texture");
-        gl.bind_texture(glow::TEXTURE_2D, Some(texture2));
-
-        gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGB as i32, // Thanks OpenGL
-            image2.width() as i32,
-            image2.height() as i32,
-            0,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            Some(image2.as_bytes()),
-        );
-
-        gl.generate_mipmap(glow::TEXTURE_2D);
-
         // Vertex Array Object
-        let vao = gl
+        let cube_vao = gl
             .create_vertex_array()
             .expect("Failed to create vertex array");
 
-        gl.bind_vertex_array(Some(vao));
+        gl.bind_vertex_array(Some(cube_vao));
 
         // Vertex Buffer Object
         let vbo = gl.create_buffer().expect("Failed to create vertex buffer");
@@ -184,37 +138,27 @@ fn main() {
         );
         gl.enable_vertex_attrib_array(0);
 
-        // aTexCoord position attribute
+        let light_vao = gl
+            .create_vertex_array()
+            .expect("Failed to create vertex array");
+
+        gl.bind_vertex_array(Some(light_vao));
+
+        gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+
+        // aPos position attribute
         gl.vertex_attrib_pointer_f32(
-            1,
-            2,
+            0,
+            3,
             glow::FLOAT,
             false,
             std::mem::size_of::<f32>() as i32 * 5,
-            std::mem::size_of::<f32>() as i32 * 3,
+            0,
         );
-        gl.enable_vertex_attrib_array(1);
+        gl.enable_vertex_attrib_array(0);
 
-        (vbo, vao, texture1, texture2)
+        (vbo, cube_vao, light_vao)
     };
-
-    // Bind texture uniforms
-    shader.bind();
-    shader.set_int("texture1", 0);
-    shader.set_int("texture2", 1);
-
-    let cube_positions = [
-        glam::vec3(0.0, 0.0, 0.0),
-        glam::vec3(2.0, 5.0, -15.0),
-        glam::vec3(-1.5, -2.2, -2.5),
-        glam::vec3(-3.8, -2.0, -12.3),
-        glam::vec3(2.4, -0.4, -3.5),
-        glam::vec3(-1.7, 3.0, -7.5),
-        glam::vec3(1.3, -2.0, -2.5),
-        glam::vec3(1.5, 2.0, -2.5),
-        glam::vec3(1.5, 0.2, -1.5),
-        glam::vec3(-1.3, 1.0, -1.5),
-    ];
 
     // Frame Timing
     let mut delta_time;
@@ -226,6 +170,9 @@ fn main() {
     let mut last_x = 0.0;
     let mut last_y = 0.0;
 
+    // Light position
+    let light_pos = glam::vec3(1.2, 1.0, 2.0);
+
     // Main Loop
     while !window.should_close() {
         let cur_frame = glfw.get_time() as f32;
@@ -235,12 +182,17 @@ fn main() {
         // Render
         unsafe {
             // Clear color
-            gl.clear_color(0.2, 0.3, 0.3, 1.0);
+            gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
             // Shader
-            shader.bind();
+            lighting_shader.bind();
 
+            // Color / lighting
+            lighting_shader.set_vec3("objectColor", glam::vec3(1.0, 0.5, 0.31));
+            lighting_shader.set_vec3("lightColor", glam::Vec3::ONE);
+
+            // View / Projection
             let view = camera.get_viewmatrix();
             let projection = glam::Mat4::perspective_rh_gl(
                 camera.get_fov().to_radians(),
@@ -249,27 +201,30 @@ fn main() {
                 100.0,
             );
 
-            shader.set_mat4("projection", false, &projection);
-            shader.set_mat4("view", false, &view);
+            lighting_shader.set_mat4("projection", false, &projection);
+            lighting_shader.set_mat4("view", false, &view);
 
-            // Bind textures
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture1));
-            gl.active_texture(glow::TEXTURE1);
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture2));
+            // World transformations
+            let model = glam::Mat4::IDENTITY;
+            lighting_shader.set_mat4("model", false, &model);
 
-            // Draw model
-            gl.bind_vertex_array(Some(vao));
-            for (i, pos) in cube_positions.iter().enumerate() {
-                let mut model = glam::Mat4::IDENTITY * glam::Mat4::from_translation(*pos);
-                let angle = i * 20;
-                model *= glam::Mat4::from_axis_angle(
-                    glam::vec3(1.0, 0.3, 0.5).normalize(),
-                    (angle as f32).to_radians(),
-                );
-                shader.set_mat4("model", false, &model);
-                gl.draw_arrays(glow::TRIANGLES, 0, 36);
-            }
+            // Draw cube model
+            gl.bind_vertex_array(Some(cube_vao));
+            gl.draw_arrays(glow::TRIANGLES, 0, 36);
+
+            // Draw light model
+            light_cube_shader.bind();
+            light_cube_shader.set_mat4("projection", false, &projection);
+            light_cube_shader.set_mat4("view", false, &view);
+
+            let mut light_cube_model = glam::Mat4::IDENTITY;
+            light_cube_model *= glam::Mat4::from_translation(light_pos);
+            light_cube_model *= glam::Mat4::from_scale(glam::Vec3::splat(0.2));
+
+            light_cube_shader.set_mat4("model", false, &light_cube_model);
+
+            gl.bind_vertex_array(Some(light_vao));
+            gl.draw_arrays(glow::TRIANGLES, 0, 36);
         }
 
         // Swap buffers and poll
@@ -321,7 +276,7 @@ fn main() {
 
     // Cleanup
     unsafe {
-        gl.delete_vertex_array(vao);
+        gl.delete_vertex_array(cube_vao);
         gl.delete_buffer(vbo);
         // gl.delete_buffer(ebo);
     }
