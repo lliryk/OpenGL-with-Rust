@@ -56,8 +56,12 @@ impl Camera {
         self.zoom = self.zoom.clamp(1.0, 90.0);
     }
 
-    pub fn get_fov(&self) -> f32 {
+    pub fn fov(&self) -> f32 {
         self.zoom
+    }
+
+    pub fn position(&self) -> glam::Vec3 {
+        self.position
     }
 
     fn update_camera_vectors(&mut self) {
