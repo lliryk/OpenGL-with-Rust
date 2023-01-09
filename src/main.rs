@@ -2,7 +2,10 @@ use std::{io::BufReader, rc::Rc};
 
 use glfw::{Action, Context, Key};
 use glow::HasContext;
-use learn_opengl::shader::Shader;
+use learn_opengl::{
+    camera::{Camera, Movement},
+    shader::Shader,
+};
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -25,6 +28,8 @@ fn main() {
 
     window.make_current();
     window.set_key_polling(true);
+    window.set_cursor_pos_polling(true);
+    window.set_scroll_polling(true);
 
     // Load gl bindings
     let gl = Rc::new(unsafe {
@@ -198,18 +203,6 @@ fn main() {
     shader.set_int("texture1", 0);
     shader.set_int("texture2", 1);
 
-    let view = glam::Mat4::IDENTITY * glam::Mat4::from_translation(glam::vec3(0.0, 0.0, -3.0));
-
-    let projection = glam::Mat4::perspective_rh(
-        45.0f32.to_radians(),
-        WIDTH as f32 / HEIGHT as f32,
-        0.1,
-        100.0,
-    );
-
-    shader.set_mat4("view", false, &view);
-    shader.set_mat4("projection", false, &projection);
-
     let cube_positions = [
         glam::vec3(0.0, 0.0, 0.0),
         glam::vec3(2.0, 5.0, -15.0),
@@ -223,8 +216,22 @@ fn main() {
         glam::vec3(-1.3, 1.0, -1.5),
     ];
 
+    // Frame Timing
+    let mut delta_time;
+    let mut last_frame = 0.0f32;
+
+    // Camera
+    let mut camera = Camera::default();
+    let mut first_mouse = false;
+    let mut last_x = 0.0;
+    let mut last_y = 0.0;
+
     // Main Loop
     while !window.should_close() {
+        let cur_frame = glfw.get_time() as f32;
+        delta_time = cur_frame - last_frame;
+        last_frame = cur_frame;
+
         // Render
         unsafe {
             // Clear color
@@ -233,6 +240,17 @@ fn main() {
 
             // Shader
             shader.bind();
+
+            let view = camera.get_viewmatrix();
+            let projection = glam::Mat4::perspective_rh_gl(
+                camera.get_fov().to_radians(),
+                WIDTH as f32 / HEIGHT as f32,
+                0.1,
+                100.0,
+            );
+
+            shader.set_mat4("projection", false, &projection);
+            shader.set_mat4("view", false, &view);
 
             // Bind textures
             gl.active_texture(glow::TEXTURE0);
@@ -260,11 +278,39 @@ fn main() {
 
         // Handle Events
         for (_, event) in glfw::flush_messages(&events) {
-            println!("{:?}", event);
+            eprintln!("{:?}", event);
             match event {
-                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                    window.set_should_close(true)
+                glfw::WindowEvent::Key(key, _, action, _) => match key {
+                    Key::Escape if action == Action::Press => window.set_should_close(true),
+                    Key::W if action != Action::Release => {
+                        camera.move_position(Movement::Forward, delta_time)
+                    }
+                    Key::S if action != Action::Release => {
+                        camera.move_position(Movement::BackWard, delta_time)
+                    }
+                    Key::A if action != Action::Release => {
+                        camera.move_position(Movement::Left, delta_time)
+                    }
+                    Key::D if action != Action::Release => {
+                        camera.move_position(Movement::Right, delta_time)
+                    }
+                    _ => {}
+                },
+                glfw::WindowEvent::CursorPos(x, y) => {
+                    if first_mouse {
+                        last_x = x as f32;
+                        last_y = y as f32;
+                        first_mouse = false;
+                    }
+                    let x_offset = x as f32 - last_x;
+                    let y_offset = last_y - y as f32;
+
+                    last_x = x as f32;
+                    last_y = y as f32;
+
+                    camera.move_view(x_offset, y_offset);
                 }
+                glfw::WindowEvent::Scroll(_, y) => camera.change_zoom(y as f32),
                 glfw::WindowEvent::FramebufferSize(width, height) => {
                     unsafe { gl.viewport(0, 0, width, height) };
                 }
