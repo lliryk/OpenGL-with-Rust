@@ -202,10 +202,27 @@ fn main() {
             lighting_shader.bind();
 
             // Color / lighting
-            lighting_shader.set_vec3("objectColor", glam::vec3(1.0, 0.5, 0.31));
-            lighting_shader.set_vec3("lightColor", glam::Vec3::ONE);
-            lighting_shader.set_vec3("lightPos", light_pos);
+            lighting_shader.set_vec3("material.ambient", glam::vec3(1.0, 0.5, 0.31));
+            lighting_shader.set_vec3("material.diffuse", glam::vec3(1.0, 0.5, 0.31));
+            lighting_shader.set_vec3("material.specular", glam::Vec3::splat(0.5));
+            lighting_shader.set_float("material.shininess", 32.0);
+
+            lighting_shader.set_vec3("light.position", light_pos);
+
+            let light_color = glam::vec3(
+                (glfw.get_time() as f32 * 2.0).sin(),
+                (glfw.get_time() as f32 * 0.7).sin(), 
+                (glfw.get_time() as f32 * 1.3).sin()
+            );
+
+            let diffuse_color = light_color * glam::Vec3::splat(0.5);
+            let ambient_color = light_color * glam::Vec3::splat(0.2);
+
+            lighting_shader.set_vec3("light.ambient", ambient_color);
+            lighting_shader.set_vec3("light.diffuse", diffuse_color);
+            lighting_shader.set_vec3("light.specular", glam::Vec3::ONE);
             lighting_shader.set_vec3("viewPos", camera.position());
+
 
             // View / Projection
             let view = camera.get_viewmatrix();
@@ -229,6 +246,9 @@ fn main() {
 
             // Draw light model
             light_cube_shader.bind();
+
+            light_cube_shader.set_vec3("lightColor", light_color);
+
             light_cube_shader.set_mat4("projection", false, &projection);
             light_cube_shader.set_mat4("view", false, &view);
 
