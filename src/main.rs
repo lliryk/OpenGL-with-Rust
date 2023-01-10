@@ -1,10 +1,11 @@
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 use glfw::{Action, Context, Key};
 use glow::HasContext;
 use learn_opengl::{
     camera::{Camera, Movement},
-    shader::Shader,
+    shader::{self, Shader},
+    texture::Texture,
 };
 
 const WIDTH: u32 = 800;
@@ -38,8 +39,8 @@ fn main() {
         glow::Context::from_loader_function(|s| glfw.get_proc_address_raw(s) as *const _)
     });
 
-    // Shader
-    let lighting_shader = Shader::from(
+    // Shaders
+    let mut lighting_shader = Shader::from_str(
         Rc::clone(&gl),
         include_str!("../res/shaders/color.vert"),
         include_str!("../res/shaders/color.frag"),
@@ -49,7 +50,29 @@ fn main() {
         std::process::exit(1);
     });
 
-    let light_cube_shader = Shader::from(
+    {
+        let diffuse_texture = Texture::new(Rc::clone(&gl), Path::new("res/container2.png"))
+            .unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+        lighting_shader
+            .add_texture(diffuse_texture, shader::TextureIndex::Index0)
+            .expect("Texture index should not be occupied");
+
+        let specular_texture =
+            Texture::new(Rc::clone(&gl), Path::new("res/container2_specular.png")).unwrap_or_else(
+                |e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                },
+            );
+        lighting_shader
+            .add_texture(specular_texture, shader::TextureIndex::Index1)
+            .expect("Texture index should not be occupied");
+    }
+
+    let light_cube_shader = Shader::from_str(
         Rc::clone(&gl),
         include_str!("../res/shaders/light_cube.vert"),
         include_str!("../res/shaders/light_cube.frag"),
@@ -69,48 +92,49 @@ fn main() {
 
         // Triangle vertices
         #[rustfmt::skip]
-        let vertices: [f32; 216] = [
-           -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,
-            0.5, -0.5, -0.5,  0.0,  0.0, -1.0, 
-            0.5,  0.5, -0.5,  0.0,  0.0, -1.0, 
-            0.5,  0.5, -0.5,  0.0,  0.0, -1.0, 
-           -0.5,  0.5, -0.5,  0.0,  0.0, -1.0, 
-           -0.5, -0.5, -0.5,  0.0,  0.0, -1.0, 
-       
-           -0.5, -0.5,  0.5,  0.0,  0.0, 1.0,
-            0.5, -0.5,  0.5,  0.0,  0.0, 1.0,
-            0.5,  0.5,  0.5,  0.0,  0.0, 1.0,
-            0.5,  0.5,  0.5,  0.0,  0.0, 1.0,
-           -0.5,  0.5,  0.5,  0.0,  0.0, 1.0,
-           -0.5, -0.5,  0.5,  0.0,  0.0, 1.0,
-       
-           -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,
-           -0.5,  0.5, -0.5, -1.0,  0.0,  0.0,
-           -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,
-           -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,
-           -0.5, -0.5,  0.5, -1.0,  0.0,  0.0,
-           -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,
-       
-            0.5,  0.5,  0.5,  1.0,  0.0,  0.0,
-            0.5,  0.5, -0.5,  1.0,  0.0,  0.0,
-            0.5, -0.5, -0.5,  1.0,  0.0,  0.0,
-            0.5, -0.5, -0.5,  1.0,  0.0,  0.0,
-            0.5, -0.5,  0.5,  1.0,  0.0,  0.0,
-            0.5,  0.5,  0.5,  1.0,  0.0,  0.0,
-       
-           -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,
-            0.5, -0.5, -0.5,  0.0, -1.0,  0.0,
-            0.5, -0.5,  0.5,  0.0, -1.0,  0.0,
-            0.5, -0.5,  0.5,  0.0, -1.0,  0.0,
-           -0.5, -0.5,  0.5,  0.0, -1.0,  0.0,
-           -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,
-       
-           -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,
-            0.5,  0.5, -0.5,  0.0,  1.0,  0.0,
-            0.5,  0.5,  0.5,  0.0,  1.0,  0.0,
-            0.5,  0.5,  0.5,  0.0,  1.0,  0.0,
-           -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,
-           -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,
+        let vertices: [f32; 288] = [
+            // positions          // normals           // texture coords
+            -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
+             0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 0.0,
+             0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
+             0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
+            -0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 1.0,
+            -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
+
+            -0.5, -0.5,  0.5,  0.0,  0.0, 1.0,   0.0, 0.0,
+             0.5, -0.5,  0.5,  0.0,  0.0, 1.0,   1.0, 0.0,
+             0.5,  0.5,  0.5,  0.0,  0.0, 1.0,   1.0, 1.0,
+             0.5,  0.5,  0.5,  0.0,  0.0, 1.0,   1.0, 1.0,
+            -0.5,  0.5,  0.5,  0.0,  0.0, 1.0,   0.0, 1.0,
+            -0.5, -0.5,  0.5,  0.0,  0.0, 1.0,   0.0, 0.0,
+
+            -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
+            -0.5,  0.5, -0.5, -1.0,  0.0,  0.0,  1.0, 1.0,
+            -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
+            -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
+            -0.5, -0.5,  0.5, -1.0,  0.0,  0.0,  0.0, 0.0,
+            -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
+
+             0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
+             0.5,  0.5, -0.5,  1.0,  0.0,  0.0,  1.0, 1.0,
+             0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
+             0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
+             0.5, -0.5,  0.5,  1.0,  0.0,  0.0,  0.0, 0.0,
+             0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
+
+            -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
+             0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  1.0, 1.0,
+             0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
+             0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
+            -0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  0.0, 0.0,
+            -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
+
+            -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
+             0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  1.0, 1.0,
+             0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
+             0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
+            -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  0.0, 0.0,
+            -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0
         ];
 
         // Vertex Array Object
@@ -135,21 +159,32 @@ fn main() {
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 6,
+            std::mem::size_of::<f32>() as i32 * 8,
             0,
         );
         gl.enable_vertex_attrib_array(0);
 
-        // aNormal 
+        // aNormal
         gl.vertex_attrib_pointer_f32(
             1,
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 6,
+            std::mem::size_of::<f32>() as i32 * 8,
             std::mem::size_of::<f32>() as i32 * 3,
         );
         gl.enable_vertex_attrib_array(1);
+
+        // aNormal
+        gl.vertex_attrib_pointer_f32(
+            2,
+            2,
+            glow::FLOAT,
+            false,
+            std::mem::size_of::<f32>() as i32 * 8,
+            std::mem::size_of::<f32>() as i32 * 6,
+        );
+        gl.enable_vertex_attrib_array(2);
 
         let light_vao = gl
             .create_vertex_array()
@@ -165,7 +200,7 @@ fn main() {
             3,
             glow::FLOAT,
             false,
-            std::mem::size_of::<f32>() as i32 * 6,
+            std::mem::size_of::<f32>() as i32 * 8,
             0,
         );
         gl.enable_vertex_attrib_array(0);
@@ -202,17 +237,16 @@ fn main() {
             lighting_shader.bind();
 
             // Color / lighting
-            lighting_shader.set_vec3("material.ambient", glam::vec3(1.0, 0.5, 0.31));
-            lighting_shader.set_vec3("material.diffuse", glam::vec3(1.0, 0.5, 0.31));
-            lighting_shader.set_vec3("material.specular", glam::Vec3::splat(0.5));
+            lighting_shader.set_int("material.diffuse", 0);
+            lighting_shader.set_int("material.specular", 1);
             lighting_shader.set_float("material.shininess", 32.0);
 
             lighting_shader.set_vec3("light.position", light_pos);
 
             let light_color = glam::vec3(
                 (glfw.get_time() as f32 * 2.0).sin(),
-                (glfw.get_time() as f32 * 0.7).sin(), 
-                (glfw.get_time() as f32 * 1.3).sin()
+                (glfw.get_time() as f32 * 0.7).sin(),
+                (glfw.get_time() as f32 * 1.3).sin(),
             );
 
             let diffuse_color = light_color * glam::Vec3::splat(0.5);
@@ -222,7 +256,6 @@ fn main() {
             lighting_shader.set_vec3("light.diffuse", diffuse_color);
             lighting_shader.set_vec3("light.specular", glam::Vec3::ONE);
             lighting_shader.set_vec3("viewPos", camera.position());
-
 
             // View / Projection
             let view = camera.get_viewmatrix();

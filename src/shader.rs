@@ -4,15 +4,38 @@ use glow::HasContext;
 
 use thiserror::Error;
 
+use crate::texture::Texture;
+
 pub struct Shader {
     gl: Rc<glow::Context>,
     program: glow::NativeProgram,
+    textures: [Option<Texture>; 16],
 }
 
 #[repr(u32)]
 pub enum ShaderType {
     VertexShader = glow::VERTEX_SHADER,
     FragmentShader = glow::FRAGMENT_SHADER,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TextureIndex {
+    Index0 = 0,
+    Index1,
+    Index2,
+    Index3,
+    Index4,
+    Index5,
+    Index6,
+    Index7,
+    Index8,
+    Index9,
+    Index10,
+    Index11,
+    Index12,
+    Index13,
+    Index14,
+    Index15,
 }
 
 #[derive(Error, Debug)]
@@ -30,8 +53,14 @@ pub enum CreationError {
     ProgramCompilationFailed { error_message: String },
 }
 
+#[derive(Error, Debug)]
+pub enum TextureError {
+    #[error("Texture index already in use")]
+    TextureIndexTaken { index: TextureIndex },
+}
+
 impl Shader {
-    pub fn from(
+    pub fn from_str(
         gl: Rc<glow::Context>,
         vertex_shader: &str,
         fragment_shader: &str,
@@ -77,10 +106,23 @@ impl Shader {
             cleanup();
 
             Ok(Shader {
-                gl: Rc::clone(&gl),
+                gl,
                 program,
+                textures: Default::default(),
             })
         }
+    }
+
+    pub fn add_texture(
+        &mut self,
+        texture: Texture,
+        index: TextureIndex,
+    ) -> Result<(), TextureError> {
+        if self.textures[index as usize].is_some() {
+            return Err(TextureError::TextureIndexTaken { index });
+        }
+        self.textures[index as usize] = Some(texture);
+        Ok(())
     }
 
     fn compile_shader(
@@ -108,7 +150,33 @@ impl Shader {
     }
 
     pub fn bind(&self) {
-        unsafe { self.gl.use_program(Some(self.program)) }
+        let texture_id = [
+            glow::TEXTURE0,
+            glow::TEXTURE1,
+            glow::TEXTURE2,
+            glow::TEXTURE3,
+            glow::TEXTURE4,
+            glow::TEXTURE5,
+            glow::TEXTURE6,
+            glow::TEXTURE7,
+            glow::TEXTURE8,
+            glow::TEXTURE9,
+            glow::TEXTURE10,
+            glow::TEXTURE11,
+            glow::TEXTURE12,
+            glow::TEXTURE13,
+            glow::TEXTURE14,
+            glow::TEXTURE15,
+        ];
+        unsafe {
+            self.gl.use_program(Some(self.program));
+            for (index, texture) in self.textures.iter().enumerate() {
+                if let Some(texture) = texture {
+                    self.gl.active_texture(texture_id[index]);
+                    texture.bind();
+                }
+            }
+        }
     }
 
     pub fn set_bool(&self, name: &str, value: bool) {
