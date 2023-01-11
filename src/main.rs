@@ -221,6 +221,19 @@ fn main() {
     // Light position
     let light_pos = glam::vec3(1.2, 1.0, 2.0);
 
+    let cube_positions = [
+        glam::vec3(0.0, 0.0, 0.0),
+        glam::vec3(2.0, 5.0, -15.0),
+        glam::vec3(-1.5, -2.2, -2.5),
+        glam::vec3(-3.8, -2.0, -12.3),
+        glam::vec3(2.4, -0.4, -3.5),
+        glam::vec3(-1.7, 3.0, -7.5),
+        glam::vec3(1.3, -2.0, -2.5),
+        glam::vec3(1.5, 2.0, -2.5),
+        glam::vec3(1.5, 0.2, -1.5),
+        glam::vec3(-1.3, 1.0, -1.5),
+    ];
+
     // Main Loop
     while !window.should_close() {
         let cur_frame = glfw.get_time() as f32;
@@ -255,6 +268,11 @@ fn main() {
             lighting_shader.set_vec3("light.ambient", ambient_color);
             lighting_shader.set_vec3("light.diffuse", diffuse_color);
             lighting_shader.set_vec3("light.specular", glam::Vec3::ONE);
+
+            lighting_shader.set_float("light.constant", 1.0);
+            lighting_shader.set_float("light.linear", 0.09);
+            lighting_shader.set_float("light.quadratic", 0.032);
+
             lighting_shader.set_vec3("viewPos", camera.position());
 
             // View / Projection
@@ -268,14 +286,17 @@ fn main() {
 
             lighting_shader.set_mat4("projection", false, &projection);
             lighting_shader.set_mat4("view", false, &view);
-
-            // World transformations
-            let model = glam::Mat4::IDENTITY;
-            lighting_shader.set_mat4("model", false, &model);
-
-            // Draw cube model
             gl.bind_vertex_array(Some(cube_vao));
-            gl.draw_arrays(glow::TRIANGLES, 0, 36);
+            // World transformations
+            for (i, position) in cube_positions.iter().enumerate() {
+                let mut model = glam::Mat4::IDENTITY * glam::Mat4::from_translation(*position);
+                let angle = 20.0f32 * i as f32;
+                model *= glam::Mat4::from_axis_angle(glam::vec3(1.0, 0.3, 0.5).normalize(), angle);
+                lighting_shader.set_mat4("model", false, &model);
+
+                // Draw cube model
+                gl.draw_arrays(glow::TRIANGLES, 0, 36);
+            }
 
             // Draw light model
             light_cube_shader.bind();

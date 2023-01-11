@@ -64,6 +64,10 @@ impl Camera {
         self.position
     }
 
+    pub fn front(&self) -> glam::Vec3 {
+        self.front
+    }
+
     fn update_camera_vectors(&mut self) {
         self.front = glam::Vec3::new(
             self.yaw.to_radians().cos() * self.pitch.to_radians().cos(),
